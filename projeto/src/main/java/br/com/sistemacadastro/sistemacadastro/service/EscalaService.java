@@ -22,6 +22,7 @@ import br.com.sistemacadastro.sistemacadastro.model.Turnos;
 import br.com.sistemacadastro.sistemacadastro.repository.ColaboradorRepository;
 import br.com.sistemacadastro.sistemacadastro.repository.EscalaRepository;
 import br.com.sistemacadastro.sistemacadastro.repository.SetoresRepository;
+import br.com.sistemacadastro.sistemacadastro.strategy.EscalaStrategyContext;
 
 @Service
 public class EscalaService {
@@ -40,6 +41,9 @@ public class EscalaService {
 
     @Autowired
     private TurnosRepository turnosRepository;
+
+    @Autowired
+    private EscalaStrategyContext escalaStrategyContext;
 
     public List<Escalas> gerarEscalasSemanais() {
         List<Escalas> escalasGeradas = new ArrayList<>();
@@ -60,13 +64,6 @@ public class EscalaService {
 
                 for (int i = 0; i < 7; i++) {
                     LocalDate dataEscala = segunda.plusDays(i);
-                    DayOfWeek diaSemana = dataEscala.getDayOfWeek();
-
-                    boolean ehFolga = contrato.getDiasFolga() != null &&
-                            contrato.getDiasFolga().stream()
-                                    .map(folga -> DayOfWeek.valueOf(folga.name()))
-                                    .anyMatch(d -> d.equals(diaSemana));
-
                     Date dataEscalaDate = Date.from(dataEscala.atStartOfDay(ZoneId.systemDefault()).toInstant());
 
                     boolean escalaExiste = escalaRepository
@@ -74,20 +71,20 @@ public class EscalaService {
 
                     if (!escalaExiste) {
                         Escalas escala = new Escalas();
+
+                        // ⚡ Corrigido: primeiro define colaborador e data para não dar NullPointerException
                         escala.setColaborador(colaborador);
                         escala.setDataEscala(dataEscalaDate);
+
+                        // === Strategy aplicado para decidir se é folga ou escala ===
+                        boolean trabalha = escalaStrategyContext.deveTrabalhar(colaborador, escala);
+                        escala.setFolga(!trabalha);
+
                         escala.setSetores(setor);
                         escala.setStatusEscala(Escalas.StatusEscala.CRIADO);
 
                         Turnos turnoParaEscala = turnosDisponiveis.get(i % turnosDisponiveis.size());
-
                         escala.setTurnos(turnoParaEscala);
-
-                        if (ehFolga) {
-                            escala.setFolga(true);
-                        } else {
-                            escala.setFolga(false);
-                        }
 
                         List<Escalas> escalasDaSemana = escalaRepository.findByColaboradorAndSemana(colaborador.getId(),
                                 hoje);
